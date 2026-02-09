@@ -216,22 +216,29 @@ pytest tests/unit/test_phase7.py::test_join -v
 
 ### Test Coverage
 
+**Python Layer** (measured with pytest-cov):
+
 ```
-Component           Coverage    Status
-──────────────────────────────────────
-Page Manager        95%         ✅
-Buffer Pool         90%         ✅
-B-Tree              85%         ✅
-WAL                 90%         ✅
-Parser              80%         ⚠️
-Executor            75%         ⚠️
-Catalog             85%         ✅
-Optimizer           70%         ⚠️
-──────────────────────────────────────
-Overall             83%         ✅
+Component              Lines    Missed   Coverage
+───────────────────────────────────────────────────
+__init__.py (API)      104       6       94% ✅
+catalog.py             126      10       92% ✅
+parser.py              274      26       91% ✅
+aggregates.py           71      12       83% ⚠️
+planner.py             142      30       79% ⚠️
+ast_nodes.py           115      27       77% ⚠️
+executor.py            301      81       73% ⚠️
+───────────────────────────────────────────────────
+Python Total         1,133     192       83% ✅
 ```
 
-**Current Status:** 27/27 tests passing (100% success rate) ✅
+**Notes:**
+- Coverage shown is for **Python query layer only** (~1,133 lines)
+- C++ storage engine (~2,500 lines) requires separate coverage tools (gcov/lcov)
+- 83% is excellent for production code - covers all main execution paths
+- Uncovered lines are mostly error handlers, edge cases, and optional features
+
+**Test Status:** 27/27 tests passing (100% success rate) ✅
 
 See [`tests/README.md`](tests/README.md) for comprehensive testing documentation.
 

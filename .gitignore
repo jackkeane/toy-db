@@ -50,6 +50,7 @@ htmlcov/
 .coverage
 .coverage.*
 *.cover
+.pytest_cache/
 
 # Documentation builds
 docs/_build/

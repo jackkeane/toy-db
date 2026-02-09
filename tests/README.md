@@ -167,7 +167,7 @@ To integrate with CI/CD:
 ```yaml
 # Example GitHub Actions workflow
 - name: Run tests
-  run: |
+  run: 
     conda activate py312
     python tests/run_tests.py
     

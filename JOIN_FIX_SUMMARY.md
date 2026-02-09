@@ -218,7 +218,7 @@ Total: 3 matches, Alice appears 2 times ✓
 
 ### Manual Test
 ```bash
-cd /home/zz79jk/clawd/toy-db
+cd toy-db
 conda activate py312
 
 # Run the specific test

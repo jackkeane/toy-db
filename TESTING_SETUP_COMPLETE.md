@@ -154,7 +154,7 @@ tests/
 ### Run All Tests
 
 ```bash
-cd /home/zz79jk/clawd/toy-db
+cd toy-db
 conda activate py312
 python tests/run_tests.py
 ```
@@ -197,7 +197,7 @@ pytest --lf
 ### Test Files Created/Modified
 
 ```
-/home/zz79jk/clawd/toy-db/
+toy-db/
 ├── tests/                              # NEW
 │   ├── unit/                           # MOVED
 │   │   ├── test_basic.py              # MOVED FROM ROOT

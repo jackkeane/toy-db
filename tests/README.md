@@ -31,7 +31,7 @@ tests/
 
 Run all tests with reports:
 ```bash
-cd /home/zz79jk/clawd/toy-db
+cd toy-db
 conda activate py312
 python tests/run_tests.py
 ```

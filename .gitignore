@@ -1,0 +1,56 @@
+# Build artifacts
+build/
+dist/
+*.so
+*.egg-info/
+*.o
+*.a
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Test artifacts
+.pytest_cache/
+test_results/
+*.db
+*.db.wal
+test*.db
+test*.db.wal
+debug*.db
+debug*.db.wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+
+# Documentation builds
+docs/_build/
+site/

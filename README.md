@@ -2,7 +2,7 @@
 
 > A fully functional relational database built from scratch in C++ and Python, featuring ACID transactions, query optimization, and advanced SQL support.
 
-[![Tests](https://img.shields.io/badge/tests-27%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-32%20passing-brightgreen)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-83%25-yellowgreen)](#testing)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#license)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)

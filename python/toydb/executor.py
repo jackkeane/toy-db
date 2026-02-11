@@ -2,7 +2,7 @@
 Query Executor - Execute parsed SQL queries against storage engine
 """
 
-from typing import List, Tuple, Any, Optional, Union
+from typing import List, Tuple, Any, Optional, Union, Set
 from .ast_nodes import *
 from .parser import parse_sql
 from .catalog import Catalog
@@ -288,7 +288,7 @@ class Executor:
             # No aggregates - regular projection
             # Order by
             if stmt.order_by:
-                rows.sort(key=lambda r: r.get(stmt.order_by))
+                rows.sort(key=lambda r: self._resolve_column_value(stmt.order_by, r))
             
             # Limit
             if stmt.limit:
@@ -296,15 +296,15 @@ class Executor:
             
             # Project columns
             if stmt.columns == ["*"]:
-                # Return all columns
+                # Return all columns from the base table schema
                 result = []
                 for row in rows:
-                    result.append(tuple(row[col.name] for col in columns))
+                    result.append(tuple(row.get(col.name) for col in columns))
             else:
-                # Return requested columns
+                # Return requested columns with ambiguity checks
                 result = []
                 for row in rows:
-                    result.append(tuple(row.get(col) for col in stmt.columns))
+                    result.append(tuple(self._resolve_column_value(col, row, strict_ambiguous=True) for col in stmt.columns))
         
         return result
     
@@ -319,7 +319,9 @@ class Executor:
         """Execute JOIN operation"""
         join = stmt.join
         left_table = stmt.table_name
+        left_ref = stmt.table_alias or left_table
         right_table = join.table_name
+        right_ref = join.alias or right_table
         
         # Get right table schema
         right_cols = self.catalog.get_columns(right_table)
@@ -347,33 +349,51 @@ class Executor:
         
         for left_row in left_rows:
             for right_row in right_rows:
-                # Create combined row with qualified column names
-                # This handles column name collisions (e.g., both tables have 'id')
                 combined = {}
-                
-                # Add left table columns with both qualified and unqualified names
+                ambiguous_cols: Set[str] = set()
+
+                # Add left columns (qualified by table + alias, plus unqualified)
                 for col_name, col_value in left_row.items():
                     combined[f"{left_table}.{col_name}"] = col_value
-                    if col_name not in combined:  # Prefer left table for unqualified
-                        combined[col_name] = col_value
+                    if left_ref != left_table:
+                        combined[f"{left_ref}.{col_name}"] = col_value
+                    combined[col_name] = col_value
                 
-                # Add right table columns with both qualified and unqualified names
+                # Add right columns (qualified by table + alias; detect unqualified ambiguity)
                 for col_name, col_value in right_row.items():
                     combined[f"{right_table}.{col_name}"] = col_value
-                    if col_name not in combined:  # Add unqualified only if no collision
+                    if right_ref != right_table:
+                        combined[f"{right_ref}.{col_name}"] = col_value
+
+                    if col_name in combined:
+                        ambiguous_cols.add(col_name)
+                        # Remove unqualified ambiguous key so callers must qualify
+                        combined.pop(col_name, None)
+                    else:
                         combined[col_name] = col_value
+
+                if ambiguous_cols:
+                    combined["__ambiguous_cols__"] = ambiguous_cols
                 
                 # Check ON condition
-                if self._evaluate_join_condition(join.on_condition, combined, left_table, right_table):
+                if self._evaluate_join_condition(join.on_condition, combined, left_table, right_table, left_ref, right_ref):
                     result.append(combined)
         
         return result
     
-    def _evaluate_join_condition(self, expr: Expr, row: dict, left_table: str, right_table: str) -> bool:
-        """Evaluate JOIN ON condition, trying to resolve unqualified column names"""
+    def _evaluate_join_condition(
+        self,
+        expr: Expr,
+        row: dict,
+        left_table: str,
+        right_table: str,
+        left_ref: Optional[str] = None,
+        right_ref: Optional[str] = None,
+    ) -> bool:
+        """Evaluate JOIN ON condition with strict column resolution"""
         if isinstance(expr, BinaryOp):
-            left_val = self._get_join_expr_value(expr.left, row, left_table, right_table)
-            right_val = self._get_join_expr_value(expr.right, row, left_table, right_table)
+            left_val = self._get_join_expr_value(expr.left, row, left_table, right_table, left_ref, right_ref)
+            right_val = self._get_join_expr_value(expr.right, row, left_table, right_table, left_ref, right_ref)
             
             if expr.op == "=":
                 return left_val == right_val
@@ -396,39 +416,53 @@ class Executor:
         
         return True
     
-    def _get_join_expr_value(self, expr: Expr, row: dict, left_table: str, right_table: str):
-        """Get expression value for JOIN, with smart column resolution"""
+    def _get_join_expr_value(
+        self,
+        expr: Expr,
+        row: dict,
+        left_table: str,
+        right_table: str,
+        left_ref: Optional[str] = None,
+        right_ref: Optional[str] = None,
+    ):
+        """Get expression value for JOIN with strict (SQL-like) resolution"""
         if isinstance(expr, ColumnRef):
             col_name = expr.name
-            
-            # Check if it's already qualified
-            if col_name in row:
-                return row[col_name]
-            
-            # Try to find it with table qualification
-            # First try left table, then right table
-            left_qualified = f"{left_table}.{col_name}"
-            right_qualified = f"{right_table}.{col_name}"
-            
-            if left_qualified in row and right_qualified not in row:
-                return row[left_qualified]
-            elif right_qualified in row and left_qualified not in row:
-                return row[right_qualified]
-            elif left_qualified in row and right_qualified in row:
-                # Ambiguous - in SQL this would be an error, but for JOIN ON,
-                # we use a heuristic: left side of = gets left table, right gets right
-                # This is handled by the caller's context
-                # For now, return left table value
-                return row[left_qualified]
-            else:
-                return None
+
+            # Explicitly qualified reference
+            if "." in col_name:
+                if col_name in row:
+                    return row[col_name]
+                raise RuntimeError(f"Column not found in JOIN condition: {col_name}")
+
+            # Unqualified reference: detect ambiguity first
+            if col_name in row.get("__ambiguous_cols__", set()):
+                raise RuntimeError(f"Ambiguous column in JOIN condition: {col_name}")
+
+            # Try known qualification variants
+            candidates = [
+                f"{left_table}.{col_name}",
+                f"{right_table}.{col_name}",
+            ]
+            if left_ref:
+                candidates.append(f"{left_ref}.{col_name}")
+            if right_ref:
+                candidates.append(f"{right_ref}.{col_name}")
+
+            values = [row[c] for c in candidates if c in row]
+            if len(values) == 1:
+                return values[0]
+            if len(values) > 1:
+                raise RuntimeError(f"Ambiguous column in JOIN condition: {col_name}")
+
+            raise RuntimeError(f"Column not found in JOIN condition: {col_name}")
         
         elif isinstance(expr, Literal):
             return expr.value
         
         elif isinstance(expr, BinaryOp):
-            left = self._get_join_expr_value(expr.left, row, left_table, right_table)
-            right = self._get_join_expr_value(expr.right, row, left_table, right_table)
+            left = self._get_join_expr_value(expr.left, row, left_table, right_table, left_ref, right_ref)
+            right = self._get_join_expr_value(expr.right, row, left_table, right_table, left_ref, right_ref)
             
             if expr.op == "+":
                 return left + right
@@ -472,6 +506,16 @@ class Executor:
             # If casting fails, return as string
             return value
     
+    def _resolve_column_value(self, column: str, row: dict, strict_ambiguous: bool = False) -> Any:
+        """Resolve column references, including qualified names and ambiguity checks."""
+        if "." in column:
+            return row.get(column)
+
+        if strict_ambiguous and column in row.get("__ambiguous_cols__", set()):
+            raise RuntimeError(f"Ambiguous column reference: {column}")
+
+        return row.get(column)
+
     def _evaluate_expr(self, expr: Expr, row: dict) -> bool:
         """Evaluate WHERE clause expression against a row"""
         if isinstance(expr, BinaryOp):
@@ -508,7 +552,7 @@ class Executor:
                 raise RuntimeError(f"Unknown operator: {op}")
         
         elif isinstance(expr, ColumnRef):
-            return row.get(expr.name)
+            return self._resolve_column_value(expr.name, row, strict_ambiguous=True)
         
         elif isinstance(expr, Literal):
             return expr.value
@@ -519,7 +563,7 @@ class Executor:
     def _get_expr_value(self, expr: Expr, row: dict) -> Any:
         """Get value of expression in context of a row"""
         if isinstance(expr, ColumnRef):
-            return row.get(expr.name)
+            return self._resolve_column_value(expr.name, row, strict_ambiguous=True)
         elif isinstance(expr, Literal):
             return expr.value
         elif isinstance(expr, BinaryOp):

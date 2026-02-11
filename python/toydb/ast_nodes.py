@@ -86,6 +86,7 @@ class SelectStmt(ASTNode):
     join: Optional['JoinClause'] = None
     group_by: Optional[List[str]] = None
     having: Optional['Expr'] = None
+    table_alias: Optional[str] = None
 
 
 @dataclass
@@ -94,6 +95,7 @@ class JoinClause:
     join_type: str  # INNER, LEFT, RIGHT, OUTER
     table_name: str
     on_condition: 'Expr'
+    alias: Optional[str] = None
 
 
 @dataclass

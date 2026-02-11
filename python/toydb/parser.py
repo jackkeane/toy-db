@@ -42,7 +42,7 @@ class SQLParser:
         - Punctuation (,, (, ), ;)
         """
         # Pattern: strings | numbers | identifiers | operators | punctuation
-        pattern = r"'[^']*'|\"[^\"]*\"|\d+\.?\d*|\w+|>=|<=|!=|[=><(),;*]"
+        pattern = r"'[^']*'|\"[^\"]*\"|\d+\.?\d*|\w+|>=|<=|!=|[=><(),;*.]"
         tokens = re.findall(pattern, sql, re.IGNORECASE)
         return [t for t in tokens if t.strip()]  # Remove empty
     
@@ -80,6 +80,28 @@ class SQLParser:
         if current is None:
             return False
         return current.upper() in [k.upper() for k in keywords]
+
+    def _is_reserved_keyword(self, token: Optional[str]) -> bool:
+        """Return True if token is an SQL keyword/operator boundary for alias parsing"""
+        if token is None:
+            return True
+        reserved = {
+            "WHERE", "GROUP", "BY", "HAVING", "ORDER", "LIMIT",
+            "INNER", "LEFT", "RIGHT", "JOIN", "ON", "AND", "OR",
+            ",", ")", ";"
+        }
+        return token.upper() in reserved
+
+    def _parse_optional_alias(self) -> Optional[str]:
+        """Parse optional table alias, with or without AS"""
+        if self.match("AS"):
+            self.advance()
+            return self.advance()
+
+        current = self.current()
+        if current and current != "." and not self._is_reserved_keyword(current):
+            return self.advance()
+        return None
     
     def parse(self) -> ASTNode:
         """Parse SQL statement and return AST"""
@@ -271,6 +293,7 @@ class SQLParser:
         
         self.expect("FROM")
         table_name = self.advance()
+        table_alias = self._parse_optional_alias()
         
         # Optional JOIN
         join = None
@@ -314,7 +337,7 @@ class SQLParser:
             self.advance()
             limit = int(self.advance())
         
-        return SelectStmt(columns, table_name, where, order_by, limit, join, group_by, having)
+        return SelectStmt(columns, table_name, where, order_by, limit, join, group_by, having, table_alias)
     
     def _parse_column_expression(self) -> str:
         """Parse a column expression (regular column, qualified column, or aggregate function)"""
@@ -352,11 +375,12 @@ class SQLParser:
         
         self.expect("JOIN")
         join_table = self.advance()
+        join_alias = self._parse_optional_alias()
         
         self.expect("ON")
         on_condition = self.parse_expression()
         
-        return JoinClause(join_type, join_table, on_condition)
+        return JoinClause(join_type, join_table, on_condition, join_alias)
     
     def parse_update(self) -> 'UpdateStmt':
         """
@@ -458,8 +482,12 @@ class SQLParser:
         if token.replace(".", "").isdigit():
             return Literal(self.parse_literal())
         
-        # Column reference
-        return ColumnRef(self.advance())
+        # Column reference (optionally qualified, e.g. u.id)
+        col = self.advance()
+        if self.match("."):
+            self.advance()
+            col = col + "." + self.advance()
+        return ColumnRef(col)
     
     def parse_literal(self) -> Any:
         """Parse literal value (string or number)"""

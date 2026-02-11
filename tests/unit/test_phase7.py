@@ -227,11 +227,11 @@ def test_join():
         
         print("✓ Created users and orders tables")
         
-        # INNER JOIN (use simple column names in SELECT, qualified in ON)
+        # INNER JOIN (use qualified column names in ON clause to avoid ambiguity)
         result = db.execute("""
             SELECT name, product 
             FROM users 
-            INNER JOIN orders ON id = user_id
+            INNER JOIN orders ON users.id = orders.user_id
         """)
         
         assert len(result) == 3  # 3 orders
@@ -248,6 +248,179 @@ def test_join():
             os.remove(f)
     
     print("\n🎉 JOIN Test: PASSED\n")
+
+
+def test_join_with_aliases():
+    """JOIN works with table aliases"""
+    db_file = "test_join_aliases.db"
+    wal_file = db_file + ".wal"
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    try:
+        with SQLDatabase(db_file) as db:
+            db.execute("CREATE TABLE users (id INT, name TEXT)")
+            db.execute("CREATE TABLE orders (id INT, user_id INT, product TEXT)")
+
+            db.execute("INSERT INTO users VALUES (1, 'Alice')")
+            db.execute("INSERT INTO users VALUES (2, 'Bob')")
+
+            db.execute("INSERT INTO orders VALUES (1, 1, 'Laptop')")
+            db.execute("INSERT INTO orders VALUES (2, 1, 'Mouse')")
+            db.execute("INSERT INTO orders VALUES (3, 2, 'Keyboard')")
+
+            result = db.execute("""
+                SELECT u.name, o.product
+                FROM users u
+                INNER JOIN orders o ON u.id = o.user_id
+            """)
+
+            assert len(result) == 3
+            assert ("Alice", "Laptop") in result
+            assert ("Alice", "Mouse") in result
+            assert ("Bob", "Keyboard") in result
+    finally:
+        for f in [db_file, wal_file]:
+            if os.path.exists(f):
+                os.remove(f)
+
+
+def test_join_ambiguous_unqualified_column_raises():
+    """Unqualified ambiguous columns should error (e.g., both tables have id)"""
+    db_file = "test_join_ambiguous.db"
+    wal_file = db_file + ".wal"
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    try:
+        with SQLDatabase(db_file) as db:
+            db.execute("CREATE TABLE users (id INT, name TEXT)")
+            db.execute("CREATE TABLE orders (id INT, user_id INT, product TEXT)")
+
+            db.execute("INSERT INTO users VALUES (1, 'Alice')")
+            db.execute("INSERT INTO orders VALUES (10, 1, 'Laptop')")
+
+            try:
+                db.execute("""
+                    SELECT id
+                    FROM users u
+                    INNER JOIN orders o ON u.id = o.user_id
+                """)
+                assert False, "Expected ambiguous-column error but query succeeded"
+            except Exception as e:
+                msg = str(e).lower()
+                assert ("ambiguous" in msg) or ("column" in msg)
+    finally:
+        for f in [db_file, wal_file]:
+            if os.path.exists(f):
+                os.remove(f)
+
+
+def test_join_with_where_filter():
+    """JOIN + WHERE should filter correctly after join"""
+    db_file = "test_join_where.db"
+    wal_file = db_file + ".wal"
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    try:
+        with SQLDatabase(db_file) as db:
+            db.execute("CREATE TABLE users (id INT, name TEXT)")
+            db.execute("CREATE TABLE orders (id INT, user_id INT, product TEXT)")
+
+            db.execute("INSERT INTO users VALUES (1, 'Alice')")
+            db.execute("INSERT INTO users VALUES (2, 'Bob')")
+
+            db.execute("INSERT INTO orders VALUES (1, 1, 'Laptop')")
+            db.execute("INSERT INTO orders VALUES (2, 1, 'Mouse')")
+            db.execute("INSERT INTO orders VALUES (3, 2, 'Keyboard')")
+
+            result = db.execute("""
+                SELECT u.name, o.product
+                FROM users u
+                INNER JOIN orders o ON u.id = o.user_id
+                WHERE u.name = 'Alice'
+            """)
+
+            assert len(result) == 2
+            assert all(r[0] == "Alice" for r in result)
+    finally:
+        for f in [db_file, wal_file]:
+            if os.path.exists(f):
+                os.remove(f)
+
+
+def test_join_zero_matches_returns_empty():
+    """INNER JOIN with no matching keys should return empty list (not crash)"""
+    db_file = "test_join_zero.db"
+    wal_file = db_file + ".wal"
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    try:
+        with SQLDatabase(db_file) as db:
+            db.execute("CREATE TABLE users (id INT, name TEXT)")
+            db.execute("CREATE TABLE orders (id INT, user_id INT, product TEXT)")
+
+            db.execute("INSERT INTO users VALUES (1, 'Alice')")
+            db.execute("INSERT INTO users VALUES (2, 'Bob')")
+
+            # user_id values do not match users.id
+            db.execute("INSERT INTO orders VALUES (1, 100, 'Laptop')")
+            db.execute("INSERT INTO orders VALUES (2, 200, 'Mouse')")
+
+            result = db.execute("""
+                SELECT u.name, o.product
+                FROM users u
+                INNER JOIN orders o ON u.id = o.user_id
+            """)
+
+            assert result == [] or len(result) == 0
+    finally:
+        for f in [db_file, wal_file]:
+            if os.path.exists(f):
+                os.remove(f)
+
+
+def test_join_on_nonexistent_column_raises():
+    """JOIN ON unknown column should raise clear error"""
+    db_file = "test_join_bad_column.db"
+    wal_file = db_file + ".wal"
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    try:
+        with SQLDatabase(db_file) as db:
+            db.execute("CREATE TABLE users (id INT, name TEXT)")
+            db.execute("CREATE TABLE orders (id INT, user_id INT, product TEXT)")
+
+            db.execute("INSERT INTO users VALUES (1, 'Alice')")
+            db.execute("INSERT INTO orders VALUES (1, 1, 'Laptop')")
+
+            try:
+                db.execute("""
+                    SELECT u.name, o.product
+                    FROM users u
+                    INNER JOIN orders o ON u.nonexistent = o.user_id
+                """)
+                assert False, "Expected unknown-column error but query succeeded"
+            except Exception as e:
+                msg = str(e).lower()
+                assert ("not found" in msg) or ("unknown" in msg) or ("column" in msg)
+    finally:
+        for f in [db_file, wal_file]:
+            if os.path.exists(f):
+                os.remove(f)
 
 
 def test_complex_query():

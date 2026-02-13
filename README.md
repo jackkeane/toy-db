@@ -2,7 +2,7 @@
 
 > A fully functional relational database built from scratch in C++ and Python, featuring ACID transactions, query optimization, and advanced SQL support.
 
-[![Tests](https://img.shields.io/badge/tests-32%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-34%20passing-brightgreen)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-83%25-yellowgreen)](#testing)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#license)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
@@ -30,8 +30,9 @@ ToyDB is a learning-oriented yet production-grade database engine that demonstra
 |---------|--------|-------------|
 | **Storage Layer** | ✅ | 4KB page-based storage with buffer pool |
 | **B-Tree Index** | ✅ | Sorted keys, O(log n) operations, range scans |
+| **Delete API** | ✅ | Key-value delete support (Indexed + Transactional engines) |
 | **Transactions** | ✅ | ACID guarantees via Write-Ahead Logging |
-| **Crash Recovery** | ✅ | Automatic recovery from WAL on restart |
+| **Crash Recovery** | ✅ | WAL replay for committed/auto transactions, aborted txns skipped |
 | **SQL Parser** | ✅ | Full DDL and DML support |
 | **Query Optimizer** | ✅ | Cost-based with index awareness |
 | **Schema Catalog** | ✅ | Persistent metadata storage |
@@ -95,7 +96,7 @@ sudo apt-get install build-essential python3-dev
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/toy-db.git
+git clone https://github.com/jackkeane/toy-db.git
 cd toy-db
 
 # Install dependencies
@@ -242,11 +243,11 @@ Python Total         2,384      ~80%+ estimated ⚠️
 **Notes:**
 - Coverage shown is for **Python query layer only** (~2,384 lines)
 - C++ storage engine (~2,500 lines) requires separate coverage tools (gcov/lcov)
-- 32/32 tests passing with comprehensive edge-case coverage
+- 34/34 tests passing with comprehensive edge-case coverage
 - Coverage percentages need re-measurement after recent JOIN enhancements
 - All main execution paths covered; uncovered lines are error handlers and edge cases
 
-**Test Status:** 32/32 tests passing (100% success rate) ✅
+**Test Status:** 34/34 tests passing (100% success rate) ✅
 
 See [`tests/README.md`](tests/README.md) for comprehensive testing documentation.
 
@@ -272,7 +273,7 @@ toy-db/
 │   ├── aggregates.py         # Aggregate functions
 │   └── ast_nodes.py          # AST definitions
 ├── tests/                     # Test suite
-│   ├── unit/                 # Component tests (32 tests)
+│   ├── unit/                 # Component tests (34 tests)
 │   ├── integration/          # Cross-component tests
 │   ├── performance/          # Benchmarks
 │   └── run_tests.py          # Automated test runner
@@ -295,12 +296,12 @@ ToyDB was built incrementally across 7 phases, each adding new functionality:
 |-------|---------|---------------|-------|
 | **Phase 1** | Storage foundation (Page, BufferPool) | ~600 | 1 |
 | **Phase 2** | B-Tree indexing | ~800 | 2 |
-| **Phase 3** | WAL & transactions | ~900 | 4 |
+| **Phase 3** | WAL & transactions | ~900 | 5 |
 | **Phase 4** | SQL parser & executor | ~1,200 | 4 |
 | **Phase 5** | Schema catalog | ~600 | 5 |
 | **Phase 6** | Query optimizer | ~700 | 5 |
 | **Phase 7** | Advanced SQL (JOIN, aggregates) | ~800 | 11 |
-| **Total** | **Production-grade database** | **~5,600** | **32** |
+| **Total** | **Production-grade database** | **~5,600** | **34** |
 
 Each phase builds on the previous, with comprehensive tests and documentation.
 
@@ -494,4 +495,4 @@ Inspired by:
 
 **⭐ Star this repo if you find it helpful!**
 
-*Last Updated: 2026-02-11 - All 32 tests passing ✅*
+*Last Updated: 2026-02-13 - All 34 tests passing ✅*

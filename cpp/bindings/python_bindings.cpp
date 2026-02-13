@@ -7,6 +7,9 @@
 #include "wal.hpp"
 #include <atomic>
 #include <set>
+#include <algorithm>
+#include <unordered_map>
+#include <vector>
 
 namespace py = pybind11;
 using namespace toydb;
@@ -121,15 +124,7 @@ public:
           btree_(&buffer_pool_, &page_manager_),
           wal_(db_file + ".wal"),
           next_txn_id_(1) {
-        
-        // Check if we need recovery
-        auto wal_records = wal_.ReadLog();
-        
-        if (!wal_records.empty()) {
-            // Perform recovery
-            Recover(wal_records);
-        }
-        
+
         // Check if database exists and has a root node
         if (page_manager_.GetNumPages() > 1) {
             // Existing database - open the B-Tree
@@ -137,6 +132,14 @@ public:
         } else {
             // New database - create B-Tree
             btree_.CreateTree();
+        }
+
+        // Check if we need recovery
+        auto wal_records = wal_.ReadLog();
+
+        if (!wal_records.empty()) {
+            // Perform recovery
+            Recover(wal_records);
         }
     }
     
@@ -158,12 +161,23 @@ public:
         wal_.LogCommitTxn(txn_id);
         wal_.Flush();
         buffer_pool_.FlushDirty();
+        txn_inserts_.erase(txn_id);
     }
     
     void abort_transaction(uint64_t txn_id) {
+        // Best-effort rollback for inserts in this transaction.
+        // (UPDATE/DELETE rollback requires before-images and is not yet implemented.)
+        auto it = txn_inserts_.find(txn_id);
+        if (it != txn_inserts_.end()) {
+            for (const auto& key : it->second) {
+                btree_.Delete(key);
+            }
+            txn_inserts_.erase(it);
+        }
+
         wal_.LogAbortTxn(txn_id);
         wal_.Flush();
-        // In a full implementation, we'd roll back changes here
+        buffer_pool_.FlushDirty();
     }
     
     void insert(const std::string& key, const std::string& value) {
@@ -183,7 +197,37 @@ public:
         
         // Apply to B-Tree
         btree_.Insert(key, value);
+
+        if (!auto_txn) {
+            txn_inserts_[txn_id].push_back(key);
+        }
         
+        if (auto_txn) {
+            commit_transaction(txn_id);
+        }
+    }
+
+    void remove(const std::string& key) {
+        remove_txn(0, key);  // Auto-txn
+    }
+
+    void remove_txn(uint64_t txn_id, const std::string& key) {
+        bool auto_txn = (txn_id == 0);
+
+        if (auto_txn) {
+            txn_id = begin_transaction();
+        }
+
+        // Log the operation
+        wal_.LogDelete(txn_id, 1, key);
+        wal_.Flush();
+
+        // Apply to B-Tree
+        bool deleted = btree_.Delete(key);
+        if (!deleted) {
+            throw std::runtime_error("Key not found: " + key);
+        }
+
         if (auto_txn) {
             commit_transaction(txn_id);
         }
@@ -232,12 +276,15 @@ private:
     BTree btree_;
     WAL wal_;
     std::atomic<uint64_t> next_txn_id_;
+    std::unordered_map<uint64_t, std::vector<std::string>> txn_inserts_;
     
     void Recover(const std::vector<WAL::WALRecord>& records) {
-        // Simple recovery: replay all committed transactions
+        // Replay all durable operations:
+        // - auto transactions (txn_id == 0)
+        // - committed explicit transactions
         std::set<uint64_t> committed_txns;
         std::set<uint64_t> aborted_txns;
-        
+
         // First pass: find committed and aborted transactions
         for (const auto& record : records) {
             if (record.type == WAL::RecordType::COMMIT_TXN) {
@@ -246,29 +293,32 @@ private:
                 aborted_txns.insert(record.txn_id);
             }
         }
-        
-        // Second pass: replay operations from committed transactions
-        for (const auto& record : records) {
-            if (record.type == WAL::RecordType::CHECKPOINT) {
-                // Clear log before checkpoint
-                continue;
-            }
-            
-            if (aborted_txns.count(record.txn_id)) {
-                // Skip aborted transactions
-                continue;
-            }
-            
-            if (record.txn_id == 0 || committed_txns.count(record.txn_id)) {
-                // Replay operation
-                if (record.type == WAL::RecordType::INSERT || 
-                    record.type == WAL::RecordType::UPDATE) {
-                    // These will be replayed once B-Tree is open
-                    // For now, just track the operations
-                }
+
+        // Start replay after the last checkpoint (if any)
+        size_t replay_start = 0;
+        for (size_t i = 0; i < records.size(); ++i) {
+            if (records[i].type == WAL::RecordType::CHECKPOINT) {
+                replay_start = i + 1;
             }
         }
-        
+
+        for (size_t i = replay_start; i < records.size(); ++i) {
+            const auto& record = records[i];
+
+            bool durable = (record.txn_id == 0) ||
+                           (committed_txns.count(record.txn_id) && !aborted_txns.count(record.txn_id));
+            if (!durable) {
+                continue;
+            }
+
+            if (record.type == WAL::RecordType::INSERT ||
+                record.type == WAL::RecordType::UPDATE) {
+                btree_.Insert(record.key, record.value);
+            } else if (record.type == WAL::RecordType::DELETE) {
+                btree_.Delete(record.key);
+            }
+        }
+
         // Update next transaction ID
         uint64_t max_txn_id = 0;
         for (const auto& record : records) {
@@ -300,6 +350,13 @@ public:
     
     void insert(const std::string& key, const std::string& value) {
         btree_.Insert(key, value);
+    }
+
+    void remove(const std::string& key) {
+        bool deleted = btree_.Delete(key);
+        if (!deleted) {
+            throw std::runtime_error("Key not found: " + key);
+        }
     }
     
     std::string get(const std::string& key) {
@@ -354,6 +411,9 @@ PYBIND11_MODULE(_storage_engine, m) {
         .def("insert", &IndexedStorageEngine::insert,
              "Insert a key-value pair into B-Tree",
              py::arg("key"), py::arg("value"))
+        .def("delete", &IndexedStorageEngine::remove,
+             "Delete a key-value pair from B-Tree",
+             py::arg("key"))
         .def("get", &IndexedStorageEngine::get,
              "Get value by key from B-Tree",
              py::arg("key"))
@@ -382,6 +442,12 @@ PYBIND11_MODULE(_storage_engine, m) {
         .def("insert_txn", &TransactionalStorageEngine::insert_txn,
              "Insert within a transaction",
              py::arg("txn_id"), py::arg("key"), py::arg("value"))
+        .def("delete", &TransactionalStorageEngine::remove,
+             "Delete with auto-transaction",
+             py::arg("key"))
+        .def("delete_txn", &TransactionalStorageEngine::remove_txn,
+             "Delete within a transaction",
+             py::arg("txn_id"), py::arg("key"))
         .def("get", &TransactionalStorageEngine::get,
              "Get value by key",
              py::arg("key"))

@@ -265,7 +265,9 @@ bool WAL::DeserializeRecord(const std::vector<char>& buffer, WALRecord& record) 
 
 std::vector<WAL::WALRecord> WAL::ReadLog() {
     std::vector<WALRecord> records;
-    
+
+    // Reset stream state before reading (important after writes/eof)
+    log_.clear();
     log_.seekg(0, std::ios::beg);
     
     while (log_.good() && !log_.eof()) {

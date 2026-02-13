@@ -6,6 +6,7 @@ Tests insert, search, and range scan operations
 
 import os
 import sys
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'python'))
 
@@ -117,10 +118,41 @@ def test_large_dataset():
     print("\n🎉 Large Dataset Test: PASSED\n")
 
 
+def test_delete_keys():
+    """Test deleting keys from B-Tree"""
+    db_file = "test_btree_delete.db"
+
+    if os.path.exists(db_file):
+        os.remove(db_file)
+
+    with IndexedDatabase(db_file) as db:
+        db.insert("k1", "v1")
+        db.insert("k2", "v2")
+        db.insert("k3", "v3")
+
+        db.delete("k2")
+
+        with pytest.raises(Exception, match="Key not found"):
+            db.get("k2")
+
+        assert db.get("k1") == "v1"
+        assert db.get("k3") == "v3"
+        assert db.range_scan("k1", "k3") == [("k1", "v1"), ("k3", "v3")]
+
+    # Verify persistence after reopen
+    with IndexedDatabase(db_file) as db:
+        with pytest.raises(Exception, match="Key not found"):
+            db.get("k2")
+        assert db.get("k1") == "v1"
+
+    os.remove(db_file)
+
+
 if __name__ == "__main__":
     try:
         test_btree_operations()
         test_large_dataset()
+        test_delete_keys()
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback

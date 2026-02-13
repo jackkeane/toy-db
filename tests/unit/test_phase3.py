@@ -161,6 +161,49 @@ def test_crash_recovery():
     print("\n🎉 Crash Recovery Test: PASSED\n")
 
 
+def test_delete_recovery_and_abort():
+    """Delete should recover, aborted txn should not be replayed"""
+    db_file = "test_delete_recovery.db"
+    wal_file = db_file + ".wal"
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    with TransactionalDatabase(db_file) as db:
+        db.insert("a", "1")
+        db.insert("b", "2")
+        db.insert("c", "3")
+
+        # committed delete
+        db.delete("b")
+
+        # aborted txn should not be visible after recovery
+        txn = db.begin_transaction()
+        db.insert_txn(txn, "x", "999")
+        db.abort_transaction(txn)
+
+    with TransactionalDatabase(db_file) as db:
+        assert db.get("a") == "1"
+        assert db.get("c") == "3"
+
+        try:
+            db.get("b")
+            assert False, "deleted key b should not exist"
+        except RuntimeError:
+            pass
+
+        try:
+            db.get("x")
+            assert False, "aborted key x should not exist"
+        except RuntimeError:
+            pass
+
+    for f in [db_file, wal_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+
 def test_checkpoint():
     """Test checkpoint and WAL truncation"""
     db_file = "test_checkpoint.db"
@@ -216,6 +259,7 @@ if __name__ == "__main__":
         test_basic_wal()
         test_manual_transactions()
         test_crash_recovery()
+        test_delete_recovery_and_abort()
         test_checkpoint()
     except Exception as e:
         print(f"\n❌ Test failed: {e}")

@@ -305,8 +305,10 @@ void BTree::SplitChild(PageID parent_id, int child_index, PageID child_id) {
         child.num_keys = mid;
     }
     
-    // Promote middle key to parent
-    std::string promoted_key = child.type == NodeType::LEAF ? sibling.keys[0] : child.keys[mid - 1];
+    // Promote separator key to parent.
+    // For leaf nodes we use the max key of the left child so that
+    // SearchInNode (first >= key) keeps equality on the left child.
+    std::string promoted_key = child.type == NodeType::LEAF ? child.keys[mid - 1] : child.keys[mid - 1];
     
     parent.keys.insert(parent.keys.begin() + child_index, promoted_key);
     parent.children.insert(parent.children.begin() + child_index + 1, sibling_id);
@@ -319,8 +321,52 @@ void BTree::SplitChild(PageID parent_id, int child_index, PageID child_id) {
 }
 
 bool BTree::Delete(const std::string& key) {
-    // TODO: Implement delete with node merging
-    // For Phase 2, we'll skip delete to keep it simple
+    auto delete_from_leaf = [&](PageID id, BTreeNode& node) -> bool {
+        int p = SearchInNode(node, key);
+        if (p >= static_cast<int>(node.num_keys) || node.keys[p] != key) {
+            return false;
+        }
+
+        // Remove key/value pair from leaf.
+        // Note: merge/rebalance is not implemented yet.
+        node.keys.erase(node.keys.begin() + p);
+        node.values.erase(node.values.begin() + p);
+        node.num_keys--;
+        SaveNode(id, node);
+        return true;
+    };
+
+    PageID leaf_id = FindLeaf(key);
+    if (leaf_id == INVALID_PAGE_ID) {
+        return false;
+    }
+
+    BTreeNode leaf = LoadNode(leaf_id);
+    if (delete_from_leaf(leaf_id, leaf)) {
+        return true;
+    }
+
+    // Fallback scan in case internal separators are stale.
+    PageID cursor = root_page_id_;
+    while (cursor != INVALID_PAGE_ID) {
+        BTreeNode n = LoadNode(cursor);
+        if (n.type == NodeType::LEAF) {
+            break;
+        }
+        if (n.children.empty()) {
+            return false;
+        }
+        cursor = n.children[0];
+    }
+
+    while (cursor != INVALID_PAGE_ID) {
+        BTreeNode n = LoadNode(cursor);
+        if (delete_from_leaf(cursor, n)) {
+            return true;
+        }
+        cursor = n.next_leaf;
+    }
+
     return false;
 }
 

@@ -99,6 +99,10 @@ class IndexedDatabase:
     def get(self, key: str) -> str:
         """Get value by key"""
         return self.engine.get(key)
+
+    def delete(self, key: str):
+        """Delete a key-value pair"""
+        self.engine.delete(key)
     
     def range_scan(self, start_key: str, end_key: str) -> list:
         """
@@ -181,6 +185,14 @@ class TransactionalDatabase:
     def insert_txn(self, txn_id: int, key: str, value: str):
         """Insert within a transaction"""
         self.engine.insert_txn(txn_id, key, value)
+
+    def delete(self, key: str):
+        """Delete with auto-transaction"""
+        self.engine.delete(key)
+
+    def delete_txn(self, txn_id: int, key: str):
+        """Delete within a transaction"""
+        self.engine.delete_txn(txn_id, key)
     
     def get(self, key: str) -> str:
         """Get value by key"""

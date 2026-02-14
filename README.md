@@ -214,12 +214,46 @@ with SQLDatabase("myapp.db") as db:
 python tests/run_tests.py
 
 # Specific test categories
-pytest tests/unit/ -v           # Unit tests
-pytest tests/integration/ -v    # Integration tests
-pytest tests/performance/ -v    # Performance benchmarks
+pytest tests/unit/ -v                      # Unit tests
+pytest tests/integration/ -v               # Integration tests
+pytest tests/integration/external -v       # External SQL corpus tests
+pytest tests/performance/ -v               # Performance benchmarks
 
 # Single test
 pytest tests/unit/test_phase7.py::test_join -v
+```
+
+### External SQL Corpus (sqllogictest)
+
+ToyDB now includes an external test harness at:
+
+- `tests/integration/external/`
+- converter: `tests/integration/external/tools/convert_sqllogictest.py`
+
+This lets you convert upstream sqllogictest-style files (`.test`/`.slt`) into ToyDB-compatible `.slt` files and run them under pytest.
+
+### What was removed before push (important)
+
+To make GitHub push succeed, one generated artifact was removed from version control:
+
+- `tests/integration/external/corpora/generated_sqllogictest/conversion_manifest.json`
+
+Why:
+- It grew to **>100MB**, which exceeds GitHub's file size limit.
+- It is generated output, not source.
+
+What remains in git:
+- converted `.slt` corpus files
+- converter script
+- test harness + docs
+
+How to regenerate locally:
+```bash
+~/anaconda3/bin/conda run -n py312 python \
+  tests/integration/external/tools/convert_sqllogictest.py \
+  --input-dir /path/to/upstream/sqllogictest \
+  --output-dir tests/integration/external/corpora/generated_sqllogictest \
+  --glob "*.test" --max-files 40
 ```
 
 ### Test Coverage

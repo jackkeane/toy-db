@@ -529,4 +529,4 @@ Inspired by:
 
 **⭐ Star this repo if you find it helpful!**
 
-*Last Updated: 2026-02-13 - All 34 tests passing ✅*
+*Last Updated: 2026-02-14 - External SQL corpus harness + converter added; tests passing ✅*

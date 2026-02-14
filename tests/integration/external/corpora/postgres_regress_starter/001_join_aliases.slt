@@ -1,0 +1,35 @@
+# Suite: postgres_regress_starter
+# Inspired by postgres regression coverage areas for joins/selects.
+# References:
+# - https://github.com/postgres/postgres
+# - https://www.postgresql.org/docs/current/regress-run.html
+
+statement ok
+CREATE TABLE customers (id INT, name TEXT);
+
+statement ok
+CREATE TABLE orders (id INT, customer_id INT, item TEXT);
+
+statement ok
+INSERT INTO customers VALUES (1, 'Alice');
+
+statement ok
+INSERT INTO customers VALUES (2, 'Bob');
+
+statement ok
+INSERT INTO orders VALUES (10, 1, 'Book');
+
+statement ok
+INSERT INTO orders VALUES (11, 1, 'Pen');
+
+statement ok
+INSERT INTO orders VALUES (12, 2, 'Desk');
+
+query rowsort
+SELECT c.name, o.item
+FROM customers c
+INNER JOIN orders o ON c.id = o.customer_id;
+----
+Alice	Book
+Alice	Pen
+Bob	Desk

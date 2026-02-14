@@ -1,0 +1,29 @@
+# Suite: sqllogictest_starter
+
+statement ok
+CREATE TABLE sales (id INT, region TEXT, amount INT);
+
+statement ok
+INSERT INTO sales VALUES (1, 'east', 100);
+
+statement ok
+INSERT INTO sales VALUES (2, 'east', 150);
+
+statement ok
+INSERT INTO sales VALUES (3, 'west', 70);
+
+statement ok
+INSERT INTO sales VALUES (4, 'west', 130);
+
+query
+SELECT id FROM sales WHERE amount >= 100 ORDER BY id;
+----
+1
+2
+4
+
+query
+SELECT region, SUM(amount) FROM sales GROUP BY region ORDER BY region;
+----
+east	250
+west	200

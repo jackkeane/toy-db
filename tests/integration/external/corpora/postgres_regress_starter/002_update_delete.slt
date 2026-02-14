@@ -1,0 +1,28 @@
+# Suite: postgres_regress_starter
+
+statement ok
+CREATE TABLE inventory (id INT, sku TEXT, qty INT);
+
+statement ok
+INSERT INTO inventory VALUES (1, 'A', 10);
+
+statement ok
+INSERT INTO inventory VALUES (2, 'B', 3);
+
+statement ok
+INSERT INTO inventory VALUES (3, 'C', 1);
+
+statement ok
+UPDATE inventory SET qty = 5 WHERE sku = 'B';
+
+statement ok
+DELETE FROM inventory WHERE qty = 1;
+
+query
+SELECT sku, qty FROM inventory ORDER BY sku;
+----
+A	10
+B	5
+
+statement error
+SELEC * FROM inventory;

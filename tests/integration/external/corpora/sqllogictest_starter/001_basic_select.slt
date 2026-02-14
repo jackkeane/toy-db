@@ -1,0 +1,24 @@
+# Suite: sqllogictest_starter
+# References:
+# - https://sqlite.org/sqllogictest
+# - https://duckdb.org/docs/stable/dev/sqllogictest/intro.html
+
+statement ok
+CREATE TABLE users (id INT, name TEXT, age INT);
+
+statement ok
+INSERT INTO users VALUES (1, 'Alice', 30);
+
+statement ok
+INSERT INTO users VALUES (2, 'Bob', 25);
+
+query
+SELECT id, name FROM users ORDER BY id;
+----
+1	Alice
+2	Bob
+
+query
+SELECT COUNT(*) FROM users;
+----
+2

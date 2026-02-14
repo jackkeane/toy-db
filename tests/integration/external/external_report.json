@@ -1,0 +1,50 @@
+{
+  "suite_summary": {
+    "postgres_regress_starter": {
+      "files": 2,
+      "cases": 16,
+      "passed": 16,
+      "failed": 0
+    },
+    "sqllogictest_starter": {
+      "files": 2,
+      "cases": 12,
+      "passed": 12,
+      "failed": 0
+    }
+  },
+  "file_results": [
+    {
+      "suite": "postgres_regress_starter",
+      "file": "/home/zz79jk/clawd/toy-db/tests/integration/external/corpora/postgres_regress_starter/001_join_aliases.slt",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "failures": []
+    },
+    {
+      "suite": "postgres_regress_starter",
+      "file": "/home/zz79jk/clawd/toy-db/tests/integration/external/corpora/postgres_regress_starter/002_update_delete.slt",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "failures": []
+    },
+    {
+      "suite": "sqllogictest_starter",
+      "file": "/home/zz79jk/clawd/toy-db/tests/integration/external/corpora/sqllogictest_starter/001_basic_select.slt",
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "failures": []
+    },
+    {
+      "suite": "sqllogictest_starter",
+      "file": "/home/zz79jk/clawd/toy-db/tests/integration/external/corpora/sqllogictest_starter/002_filter_groupby.slt",
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "failures": []
+    }
+  ]
+}

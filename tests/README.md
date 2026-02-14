@@ -49,6 +49,9 @@ pytest tests/unit/ -v
 # Integration tests only
 pytest tests/integration/ -v
 
+# External SQL corpus integration tests
+pytest tests/integration/external -v
+
 # Performance tests only
 pytest tests/performance/ -v
 
